@@ -4,6 +4,7 @@ import com.example.demo.entity.Alerta;
 import com.example.demo.entity.InstanciaReporte;
 import com.example.demo.entity.NotificacionReporte;
 import com.example.demo.repository.NotificacionReporteRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,15 @@ public class NotificacionService {
     private final JavaMailSender mailSender;
     private final NotificacionReporteRepository notificacionRepo;
     private final WhatsAppService whatsAppService;
+
+    @Value("${notificaciones.email.habilitado:false}")
+    private boolean emailHabilitado;
+
+    @Value("${spring.mail.username:}")
+    private String emailRemitente;
+
+    @Value("${notificaciones.url.base:http://localhost:5173}")
+    private String urlBase;
 
     public NotificacionService(JavaMailSender mailSender,
                               NotificacionReporteRepository notificacionRepo,
@@ -30,7 +40,11 @@ public class NotificacionService {
      */
     public void enviarNotificacionAlerta(Alerta alerta) {
         // 1. Enviar por Email
-        enviarEmail(alerta);
+        if (emailHabilitado) {
+            enviarEmail(alerta);
+        } else {
+            System.out.println("ℹ️ Email deshabilitado - omitiendo envío de email");
+        }
         
         // 2. Enviar por WhatsApp
         if (whatsAppService.estaDisponible()) {
@@ -42,7 +56,12 @@ public class NotificacionService {
         }
         
         // 3. Enviar también a correos adicionales configurados
-        enviarCorreosAdicionales(alerta);
+        if (emailHabilitado) {
+            enviarCorreosAdicionales(alerta);
+        }
+
+        // 4. Log de la notificación (siempre se registra)
+        System.out.println("📨 Notificación procesada para: " + alerta.getUsuarioDestino().getNombreCompleto());
     }
 
     /**
@@ -64,7 +83,7 @@ public class NotificacionService {
             "⏰ Fecha Límite: %s\n\n" +
             "Estado anterior: %s\n" +
             "Estado actual: %s\n\n" +
-            "Accede al sistema para más detalles: http://localhost:3000/reportes/%s\n\n" +
+            "Accede al sistema para más detalles: %s/reportes/%s\n\n" +
             "---\n" +
             "Sistema de Seguimiento de Reportes - Llanogas",
             instancia.getReporte().getNombre(),
@@ -73,6 +92,7 @@ public class NotificacionService {
             instancia.getFechaVencimientoCalculada(),
             estadoAnterior,
             instancia.getEstado().getNombre(),
+            urlBase,
             instancia.getId()
         );
 
@@ -80,7 +100,9 @@ public class NotificacionService {
         String emailResponsable = instancia.getReporte().getResponsableElaboracion().getCorreo();
         String telefonoResponsable = instancia.getReporte().getResponsableElaboracion().getTelefono();
         
-        enviarCorreo(emailResponsable, asunto, cuerpo);
+        if (emailHabilitado) {
+            enviarCorreo(emailResponsable, asunto, cuerpo);
+        }
         
         if (whatsAppService.estaDisponible() && telefonoResponsable != null) {
             try {
@@ -94,7 +116,9 @@ public class NotificacionService {
         String emailSupervisor = instancia.getReporte().getResponsableSupervision().getCorreo();
         String telefonoSupervisor = instancia.getReporte().getResponsableSupervision().getTelefono();
         
-        enviarCorreo(emailSupervisor, asunto, cuerpo);
+        if (emailHabilitado) {
+            enviarCorreo(emailSupervisor, asunto, cuerpo);
+        }
         
         if (whatsAppService.estaDisponible() && telefonoSupervisor != null) {
             try {
@@ -103,29 +127,37 @@ public class NotificacionService {
                 System.err.println("⚠️ Error al enviar WhatsApp al supervisor: " + e.getMessage());
             }
         }
+
+        System.out.println("📨 Notificación de cambio de estado procesada");
     }
 
     /**
      * Envía email de alerta
      */
     private void enviarEmail(Alerta alerta) {
+        if (!emailHabilitado || emailRemitente == null || emailRemitente.isEmpty()) {
+            System.out.println("⚠️ Email no configurado - omitiendo envío");
+            return;
+        }
+
         try {
             SimpleMailMessage mensaje = new SimpleMailMessage();
             mensaje.setTo(alerta.getUsuarioDestino().getCorreo());
             mensaje.setSubject(generarAsuntoAlerta(alerta));
             mensaje.setText(generarCuerpoAlerta(alerta));
-            mensaje.setFrom("reportes@llanogas.com");
+            mensaje.setFrom(emailRemitente);
 
             mailSender.send(mensaje);
             System.out.println("✓ Email enviado a: " + alerta.getUsuarioDestino().getCorreo());
 
         } catch (Exception e) {
             System.err.println("✗ Error al enviar email: " + e.getMessage());
-            // No lanzar excepción para no interrumpir el proceso de alertas
         }
     }
 
     private void enviarCorreosAdicionales(Alerta alerta) {
+        if (!emailHabilitado) return;
+
         List<NotificacionReporte> notificaciones = notificacionRepo
                 .findByReporte(alerta.getInstancia().getReporte());
 
@@ -135,7 +167,9 @@ public class NotificacionService {
                 mensaje.setTo(notif.getCorreo());
                 mensaje.setSubject(generarAsuntoAlerta(alerta));
                 mensaje.setText(generarCuerpoAlerta(alerta));
-                mensaje.setFrom("reportes@llanogas.com");
+                if (emailRemitente != null && !emailRemitente.isEmpty()) {
+                    mensaje.setFrom(emailRemitente);
+                }
 
                 mailSender.send(mensaje);
                 System.out.println("✓ Correo adicional enviado a: " + notif.getCorreo());
@@ -146,17 +180,22 @@ public class NotificacionService {
     }
 
     private void enviarCorreo(String destinatario, String asunto, String cuerpo) {
+        if (!emailHabilitado || emailRemitente == null || emailRemitente.isEmpty()) {
+            System.out.println("⚠️ Email no configurado - omitiendo envío a " + destinatario);
+            return;
+        }
+
         try {
             SimpleMailMessage mensaje = new SimpleMailMessage();
             mensaje.setTo(destinatario);
             mensaje.setSubject(asunto);
             mensaje.setText(cuerpo);
-            mensaje.setFrom("reportes@llanogas.com");
+            mensaje.setFrom(emailRemitente);
 
             mailSender.send(mensaje);
             System.out.println("✓ Correo enviado a: " + destinatario);
         } catch (Exception e) {
-            System.err.println("✗ Error al enviar correo a " + destinatario);
+            System.err.println("✗ Error al enviar correo a " + destinatario + ": " + e.getMessage());
         }
     }
 
@@ -183,7 +222,7 @@ public class NotificacionService {
             "⏰ Fecha Límite: %s\n" +
             "📊 Estado Actual: %s\n" +
             "⚖️ Base Legal: %s\n\n" +
-            "Accede al sistema para gestionar este reporte: http://localhost:3000/reportes/%s\n\n" +
+            "Accede al sistema para gestionar este reporte: %s/reportes/%s\n\n" +
             "---\n" +
             "Sistema de Seguimiento de Reportes - Llanogas\n" +
             "Este es un mensaje automático, por favor no responder.",
@@ -195,6 +234,7 @@ public class NotificacionService {
             instancia.getFechaVencimientoCalculada(),
             instancia.getEstado().getNombre(),
             instancia.getReporte().getBaseLegal(),
+            urlBase,
             instancia.getId()
         );
     }

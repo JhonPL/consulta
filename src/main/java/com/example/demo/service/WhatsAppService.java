@@ -2,36 +2,63 @@ package com.example.demo.service;
 
 import com.example.demo.entity.Alerta;
 import com.example.demo.entity.InstanciaReporte;
-import com.twilio.Twilio;
-import com.twilio.rest.api.v2010.account.Message;
-import com.twilio.type.PhoneNumber;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
+import java.time.LocalDate;
 
 @Service
 public class WhatsAppService {
 
-    @Value("${twilio.account.sid}")
+    @Value("${twilio.account.sid:}")
     private String accountSid;
 
-    @Value("${twilio.auth.token}")
+    @Value("${twilio.auth.token:}")
     private String authToken;
 
-    @Value("${twilio.whatsapp.number}")
+    @Value("${twilio.whatsapp.number:}")
     private String twilioWhatsAppNumber;
+
+    @Value("${notificaciones.whatsapp.habilitado:false}")
+    private boolean whatsappHabilitado;
+
+    private boolean inicializado = false;
 
     @PostConstruct
     public void init() {
-        Twilio.init(accountSid, authToken);
-        System.out.println("✓ Twilio WhatsApp inicializado correctamente");
+        if (estaConfigurado()) {
+            try {
+                com.twilio.Twilio.init(accountSid, authToken);
+                inicializado = true;
+                System.out.println("✓ Twilio WhatsApp inicializado correctamente");
+            } catch (Exception e) {
+                System.err.println("⚠️ No se pudo inicializar Twilio: " + e.getMessage());
+                inicializado = false;
+            }
+        } else {
+            System.out.println("ℹ️ WhatsApp no configurado - notificaciones por WhatsApp deshabilitadas");
+        }
+    }
+
+    /**
+     * Verifica si las credenciales de Twilio están configuradas
+     */
+    private boolean estaConfigurado() {
+        return accountSid != null && !accountSid.isEmpty() && !accountSid.startsWith("AC") == false &&
+               authToken != null && !authToken.isEmpty() && !authToken.equals("your_auth_token_here") &&
+               twilioWhatsAppNumber != null && !twilioWhatsAppNumber.isEmpty();
     }
 
     /**
      * Envía notificación de alerta por WhatsApp
      */
     public void enviarNotificacionAlerta(Alerta alerta) {
+        if (!estaDisponible()) {
+            System.out.println("⚠️ WhatsApp no disponible - omitiendo envío");
+            return;
+        }
+
         String telefono = alerta.getUsuarioDestino().getTelefono();
         
         if (telefono == null || telefono.isEmpty()) {
@@ -54,7 +81,7 @@ public class WhatsAppService {
      * Envía notificación de cambio de estado por WhatsApp
      */
     public void enviarCambioEstado(InstanciaReporte instancia, String estadoAnterior, String telefono) {
-        if (telefono == null || telefono.isEmpty()) {
+        if (!estaDisponible() || telefono == null || telefono.isEmpty()) {
             return;
         }
 
@@ -86,15 +113,21 @@ public class WhatsAppService {
      * Envía un mensaje de WhatsApp genérico
      */
     public void enviarMensaje(String telefonoDestino, String mensaje) {
+        if (!estaDisponible()) {
+            System.out.println("⚠️ WhatsApp no disponible - mensaje no enviado");
+            return;
+        }
+
         try {
             // Asegurar formato correcto del teléfono
             String telefonoFormateado = formatearTelefono(telefonoDestino);
             
-            Message message = Message.creator(
-                    new PhoneNumber("whatsapp:" + telefonoFormateado),
-                    new PhoneNumber(twilioWhatsAppNumber),
+            com.twilio.rest.api.v2010.account.Message message = 
+                com.twilio.rest.api.v2010.account.Message.creator(
+                    new com.twilio.type.PhoneNumber("whatsapp:" + telefonoFormateado),
+                    new com.twilio.type.PhoneNumber(twilioWhatsAppNumber),
                     mensaje
-            ).create();
+                ).create();
 
             System.out.println("✓ Mensaje WhatsApp enviado. SID: " + message.getSid());
         } catch (Exception e) {
@@ -134,8 +167,8 @@ public class WhatsAppService {
 
     private String obtenerMensajeResumido(Alerta alerta) {
         String tipoNombre = alerta.getTipo().getNombre().toUpperCase();
-        int diasHasta = alerta.getInstancia().getFechaVencimientoCalculada()
-                .compareTo(java.time.LocalDate.now());
+        LocalDate fechaVencimiento = alerta.getInstancia().getFechaVencimientoCalculada();
+        long diasHasta = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), fechaVencimiento);
 
         if (tipoNombre.contains("VENCIDO") || tipoNombre.contains("CRÍTICA")) {
             return "⚠️ *URGENTE:* Este reporte está VENCIDO. Envíe inmediatamente.";
@@ -195,12 +228,6 @@ public class WhatsAppService {
      * Verifica si el servicio de WhatsApp está disponible
      */
     public boolean estaDisponible() {
-        try {
-            return accountSid != null && !accountSid.isEmpty() &&
-                   authToken != null && !authToken.isEmpty() &&
-                   twilioWhatsAppNumber != null && !twilioWhatsAppNumber.isEmpty();
-        } catch (Exception e) {
-            return false;
-        }
+        return whatsappHabilitado && inicializado && estaConfigurado();
     }
 }

@@ -6,5 +6,4 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @Configuration
 @EnableScheduling
 public class SchedulingConfig {
-    // Esta configuración habilita el uso de @Scheduled en toda la aplicación
 }

@@ -3,7 +3,6 @@ package com.example.demo.controller;
 import com.example.demo.entity.Reporte;
 import com.example.demo.service.ReporteService;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -43,7 +42,6 @@ public class ReporteController {
         service.eliminar(id);
     }
 
-    // Extras
     @GetMapping("/entidad/{idEntidad}")
     public List<Reporte> porEntidad(@PathVariable Integer idEntidad) {
         return service.listarPorEntidad(idEntidad);

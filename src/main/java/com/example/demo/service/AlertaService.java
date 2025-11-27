@@ -12,4 +12,7 @@ public interface AlertaService {
     void eliminar(Integer id);
 
     List<Alerta> listarPorInstancia(Integer instanciaId);
+    List<Alerta> listarPorUsuario(Integer usuarioId);
+    List<Alerta> listarNoLeidas(Integer usuarioId);
+    Alerta marcarComoLeida(Integer id);
 }

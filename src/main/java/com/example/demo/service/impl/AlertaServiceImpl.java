@@ -2,8 +2,10 @@ package com.example.demo.service.impl;
 
 import com.example.demo.entity.Alerta;
 import com.example.demo.entity.InstanciaReporte;
+import com.example.demo.entity.Usuario;
 import com.example.demo.repository.AlertaRepository;
 import com.example.demo.repository.InstanciaReporteRepository;
+import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.AlertaService;
 import org.springframework.stereotype.Service;
 
@@ -14,11 +16,14 @@ public class AlertaServiceImpl implements AlertaService {
 
     private final AlertaRepository repository;
     private final InstanciaReporteRepository instanciaRepo;
+    private final UsuarioRepository usuarioRepo;
 
     public AlertaServiceImpl(AlertaRepository repository,
-                             InstanciaReporteRepository instanciaRepo) {
+                             InstanciaReporteRepository instanciaRepo,
+                             UsuarioRepository usuarioRepo) {
         this.repository = repository;
         this.instanciaRepo = instanciaRepo;
+        this.usuarioRepo = usuarioRepo;
     }
 
     @Override
@@ -64,5 +69,28 @@ public class AlertaServiceImpl implements AlertaService {
                 .orElseThrow(() -> new RuntimeException("Instancia no encontrada"));
 
         return repository.findByInstancia(instancia);
+    }
+
+    @Override
+    public List<Alerta> listarPorUsuario(Integer usuarioId) {
+        Usuario usuario = usuarioRepo.findById(usuarioId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        return repository.findByUsuarioDestino(usuario);
+    }
+
+    @Override
+    public List<Alerta> listarNoLeidas(Integer usuarioId) {
+        Usuario usuario = usuarioRepo.findById(usuarioId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        return repository.findByUsuarioDestinoAndLeidaFalse(usuario);
+    }
+
+    @Override
+    public Alerta marcarComoLeida(Integer id) {
+        Alerta alerta = obtenerPorId(id);
+        alerta.setLeida(true);
+        return repository.save(alerta);
     }
 }

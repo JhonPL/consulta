@@ -2,10 +2,17 @@ package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "reportes")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class Reporte {
 
     @Id
@@ -15,20 +22,20 @@ public class Reporte {
     @Column(nullable = false, length = 200)
     private String nombre;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "entidad_id", nullable = false)
     private Entidad entidad;
 
-    @Column(columnDefinition = "text", name = "base_legal")
+    @Column(name = "base_legal", columnDefinition = "TEXT")
     private String baseLegal;
 
     @Column(name = "fecha_inicio_vigencia")
-    private java.time.LocalDate fechaInicioVigencia;
+    private LocalDate fechaInicioVigencia;
 
     @Column(name = "fecha_fin_vigencia")
-    private java.time.LocalDate fechaFinVigencia;
+    private LocalDate fechaFinVigencia;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "frecuencia_id", nullable = false)
     private Frecuencia frecuencia;
 
@@ -47,19 +54,30 @@ public class Reporte {
     @Column(name = "link_instrucciones", length = 255)
     private String linkInstrucciones;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "responsable_elaboracion_id", nullable = false)
     private Usuario responsableElaboracion;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "responsable_supervision_id", nullable = false)
     private Usuario responsableSupervision;
 
     private boolean activo = true;
 
     @Column(name = "fecha_creacion")
-    private java.time.LocalDateTime fechaCreacion;
+    private LocalDateTime fechaCreacion;
 
     @Column(name = "fecha_actualizacion")
-    private java.time.LocalDateTime fechaActualizacion;
+    private LocalDateTime fechaActualizacion;
+
+    @PrePersist
+    protected void onCreate() {
+        fechaCreacion = LocalDateTime.now();
+        fechaActualizacion = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        fechaActualizacion = LocalDateTime.now();
+    }
 }

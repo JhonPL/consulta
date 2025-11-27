@@ -46,4 +46,19 @@ public class AlertaController {
     public List<Alerta> porInstancia(@PathVariable Integer instanciaId) {
         return service.listarPorInstancia(instanciaId);
     }
+
+    @GetMapping("/usuario/{usuarioId}")
+    public List<Alerta> porUsuario(@PathVariable Integer usuarioId) {
+        return service.listarPorUsuario(usuarioId);
+    }
+
+    @GetMapping("/usuario/{usuarioId}/no-leidas")
+    public List<Alerta> noLeidasPorUsuario(@PathVariable Integer usuarioId) {
+        return service.listarNoLeidas(usuarioId);
+    }
+
+    @PatchMapping("/{id}/leer")
+    public Alerta marcarComoLeida(@PathVariable Integer id) {
+        return service.marcarComoLeida(id);
+    }
 }

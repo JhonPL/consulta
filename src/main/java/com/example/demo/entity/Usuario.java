@@ -2,6 +2,8 @@ package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -11,6 +13,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "usuarios")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 @EntityListeners(AuditingEntityListener.class)
 public class Usuario {
 
@@ -40,7 +44,7 @@ public class Usuario {
     @Column(length = 30)
     private String telefono;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "rol_id", nullable = false)
     private Rol rol;
 

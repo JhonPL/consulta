@@ -31,5 +31,5 @@ public class EstadisticasDTO {
     private Long reportesProximosVencer3Dias;
     
     // Tendencia
-    private Map<String, Double> tendenciaMensual; // mes -> % cumplimiento
+    private Map<String, Double> tendenciaMensual;
 }

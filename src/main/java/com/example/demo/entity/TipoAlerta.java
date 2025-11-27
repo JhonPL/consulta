@@ -2,10 +2,14 @@ package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
 @Entity
 @Table(name = "tipos_alerta")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class TipoAlerta {
 
     @Id

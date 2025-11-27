@@ -25,17 +25,12 @@ public class EstadisticasService {
     }
 
     public EstadisticasDTO obtenerEstadisticas(LocalDate fechaInicio, LocalDate fechaFin) {
-        List<InstanciaReporte> instancias = instanciaRepo.findAll().stream()
-                .filter(i -> i.getFechaVencimientoCalculada() != null)
-                .filter(i -> !i.getFechaVencimientoCalculada().isBefore(fechaInicio) &&
-                           !i.getFechaVencimientoCalculada().isAfter(fechaFin))
-                .toList();
+        List<InstanciaReporte> instancias = instanciaRepo.findByFechaVencimientoCalculadaBetween(fechaInicio, fechaFin);
 
         EstadisticasDTO stats = new EstadisticasDTO();
         
         stats.setTotalObligaciones((long) instancias.size());
         
-        // Contar por estado
         long enviadosATiempo = instancias.stream()
                 .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() <= 0)
                 .filter(i -> i.getEstado().getNombre().equalsIgnoreCase("Enviado") ||
@@ -64,8 +59,6 @@ public class EstadisticasService {
         stats.setTotalVencidos(vencidos);
         stats.setTotalPendientes(pendientes);
         
-        // Calcular porcentaje de cumplimiento
-        long totalEnviados = enviadosATiempo + enviadosTarde;
         if (stats.getTotalObligaciones() > 0) {
             stats.setPorcentajeCumplimientoATiempo(
                 (enviadosATiempo * 100.0) / stats.getTotalObligaciones()
@@ -74,49 +67,12 @@ public class EstadisticasService {
             stats.setPorcentajeCumplimientoATiempo(0.0);
         }
         
-        // Calcular días de retraso promedio
         double promedioRetraso = instancias.stream()
                 .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0)
                 .mapToInt(InstanciaReporte::getDiasDesviacion)
                 .average()
                 .orElse(0.0);
         stats.setDiasRetrasoPromedio(promedioRetraso);
-        
-        // Entidad con mayor incumplimiento
-        Map<String, Long> incumplimientosPorEntidad = instancias.stream()
-                .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0)
-                .collect(Collectors.groupingBy(
-                    i -> i.getReporte().getEntidad().getRazonSocial(),
-                    Collectors.counting()
-                ));
-        
-        if (!incumplimientosPorEntidad.isEmpty()) {
-            Map.Entry<String, Long> maxEntidad = incumplimientosPorEntidad.entrySet().stream()
-                    .max(Map.Entry.comparingByValue())
-                    .orElse(null);
-            if (maxEntidad != null) {
-                stats.setEntidadMayorIncumplimiento(maxEntidad.getKey());
-                stats.setIncumplimientosEntidadProblema(maxEntidad.getValue());
-            }
-        }
-        
-        // Responsable con mayor incumplimiento
-        Map<String, Long> incumplimientosPorResponsable = instancias.stream()
-                .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0)
-                .collect(Collectors.groupingBy(
-                    i -> i.getReporte().getResponsableElaboracion().getNombreCompleto(),
-                    Collectors.counting()
-                ));
-        
-        if (!incumplimientosPorResponsable.isEmpty()) {
-            Map.Entry<String, Long> maxResponsable = incumplimientosPorResponsable.entrySet().stream()
-                    .max(Map.Entry.comparingByValue())
-                    .orElse(null);
-            if (maxResponsable != null) {
-                stats.setResponsableMayorIncumplimiento(maxResponsable.getKey());
-                stats.setIncumplimientosResponsableProblema(maxResponsable.getValue());
-            }
-        }
         
         // Distribución por estado
         Map<String, Long> distribucion = instancias.stream()
@@ -159,19 +115,7 @@ public class EstadisticasService {
                 .collect(Collectors.groupingBy(
                     i -> i.getReporte().getEntidad().getRazonSocial(),
                     Collectors.groupingBy(
-                        i -> {
-                            if (i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
-                                i.getDiasDesviacion() != null && i.getDiasDesviacion() <= 0) {
-                                return "A Tiempo";
-                            } else if (i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
-                                      i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0) {
-                                return "Tarde";
-                            } else if (LocalDate.now().isAfter(i.getFechaVencimientoCalculada())) {
-                                return "Vencido";
-                            } else {
-                                return "Pendiente";
-                            }
-                        },
+                        this::clasificarEstado,
                         Collectors.counting()
                     )
                 ));
@@ -188,19 +132,7 @@ public class EstadisticasService {
                 .collect(Collectors.groupingBy(
                     i -> i.getReporte().getResponsableElaboracion().getNombreCompleto(),
                     Collectors.groupingBy(
-                        i -> {
-                            if (i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
-                                i.getDiasDesviacion() != null && i.getDiasDesviacion() <= 0) {
-                                return "A Tiempo";
-                            } else if (i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
-                                      i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0) {
-                                return "Tarde";
-                            } else if (LocalDate.now().isAfter(i.getFechaVencimientoCalculada())) {
-                                return "Vencido";
-                            } else {
-                                return "Pendiente";
-                            }
-                        },
+                        this::clasificarEstado,
                         Collectors.counting()
                     )
                 ));
@@ -219,16 +151,12 @@ public class EstadisticasService {
             LocalDate inicioMes = mes.atDay(1);
             LocalDate finMes = mes.atEndOfMonth();
             
-            List<InstanciaReporte> instanciasMes = instanciaRepo.findAll().stream()
-                    .filter(inst -> inst.getFechaVencimientoCalculada() != null)
-                    .filter(inst -> !inst.getFechaVencimientoCalculada().isBefore(inicioMes) &&
-                                  !inst.getFechaVencimientoCalculada().isAfter(finMes))
-                    .toList();
+            List<InstanciaReporte> instanciasMes = instanciaRepo.findByFechaVencimientoCalculadaBetween(inicioMes, finMes);
             
             long total = instanciasMes.size();
             long aTiempo = instanciasMes.stream()
-                    .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() <= 0)
-                    .filter(i -> i.getEstado().getNombre().equalsIgnoreCase("Enviado"))
+                    .filter(inst -> inst.getDiasDesviacion() != null && inst.getDiasDesviacion() <= 0)
+                    .filter(inst -> inst.getEstado().getNombre().equalsIgnoreCase("Enviado"))
                     .count();
             
             double porcentaje = total > 0 ? (aTiempo * 100.0) / total : 0.0;
@@ -250,14 +178,7 @@ public class EstadisticasService {
 
     public Map<String, Object> obtenerProximosAVencer(int dias) {
         LocalDate hoy = LocalDate.now();
-        LocalDate limite = hoy.plusDays(dias);
-        
-        List<InstanciaReporte> proximos = instanciaRepo.findAll().stream()
-                .filter(i -> i.getFechaVencimientoCalculada().isAfter(hoy) &&
-                           i.getFechaVencimientoCalculada().isBefore(limite.plusDays(1)))
-                .filter(i -> !i.getEstado().getNombre().equalsIgnoreCase("Enviado"))
-                .sorted(Comparator.comparing(InstanciaReporte::getFechaVencimientoCalculada))
-                .toList();
+        List<InstanciaReporte> proximos = instanciaRepo.findProximosAVencer(hoy, hoy.plusDays(dias));
         
         Map<String, Object> resultado = new HashMap<>();
         resultado.put("cantidad", proximos.size());
@@ -267,13 +188,7 @@ public class EstadisticasService {
 
     public Map<String, Object> obtenerReportesVencidos() {
         LocalDate hoy = LocalDate.now();
-        
-        List<InstanciaReporte> vencidos = instanciaRepo.findAll().stream()
-                .filter(i -> i.getFechaVencimientoCalculada().isBefore(hoy))
-                .filter(i -> !i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
-                           !i.getEstado().getNombre().equalsIgnoreCase("Aprobado"))
-                .sorted(Comparator.comparing(InstanciaReporte::getFechaVencimientoCalculada))
-                .toList();
+        List<InstanciaReporte> vencidos = instanciaRepo.findVencidos(hoy);
         
         Map<String, Object> resultado = new HashMap<>();
         resultado.put("cantidad", vencidos.size());
@@ -334,13 +249,20 @@ public class EstadisticasService {
         if (fechaInicio == null) fechaInicio = LocalDate.now().minusMonths(3);
         if (fechaFin == null) fechaFin = LocalDate.now();
         
-        final LocalDate inicio = fechaInicio;
-        final LocalDate fin = fechaFin;
-        
-        return instanciaRepo.findAll().stream()
-                .filter(i -> i.getFechaVencimientoCalculada() != null)
-                .filter(i -> !i.getFechaVencimientoCalculada().isBefore(inicio) &&
-                           !i.getFechaVencimientoCalculada().isAfter(fin))
-                .toList();
+        return instanciaRepo.findByFechaVencimientoCalculadaBetween(fechaInicio, fechaFin);
+    }
+
+    private String clasificarEstado(InstanciaReporte i) {
+        if (i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
+            i.getDiasDesviacion() != null && i.getDiasDesviacion() <= 0) {
+            return "A Tiempo";
+        } else if (i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
+                  i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0) {
+            return "Tarde";
+        } else if (LocalDate.now().isAfter(i.getFechaVencimientoCalculada())) {
+            return "Vencido";
+        } else {
+            return "Pendiente";
+        }
     }
 }

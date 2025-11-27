@@ -2,10 +2,16 @@ package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "alertas")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class Alerta {
 
     @Id
@@ -13,27 +19,27 @@ public class Alerta {
     @Column(name = "id_alerta")
     private Integer id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "instancia_reporte_id", nullable = false)
     private InstanciaReporte instancia;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "tipo_alerta_id", nullable = false)
     private TipoAlerta tipo;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "usuario_destino_id", nullable = false)
     private Usuario usuarioDestino;
 
     @Column(name = "fecha_programada")
-    private java.time.LocalDateTime fechaProgramada;
+    private LocalDateTime fechaProgramada;
 
     @Column(name = "fecha_enviada")
-    private java.time.LocalDateTime fechaEnviada;
+    private LocalDateTime fechaEnviada;
 
     private boolean enviada;
 
-    @Column(columnDefinition = "text")
+    @Column(columnDefinition = "TEXT")
     private String mensaje;
 
     private boolean leida;

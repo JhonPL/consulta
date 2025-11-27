@@ -19,9 +19,6 @@ public class EstadisticasController {
         this.service = service;
     }
 
-    /**
-     * Dashboard principal con todas las métricas
-     */
     @GetMapping("/dashboard")
     public EstadisticasDTO obtenerDashboard(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
@@ -37,9 +34,6 @@ public class EstadisticasController {
         return service.obtenerEstadisticas(fechaInicio, fechaFin);
     }
 
-    /**
-     * Cumplimiento por entidad
-     */
     @GetMapping("/cumplimiento-por-entidad")
     public Map<String, Object> cumplimientoPorEntidad(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
@@ -48,9 +42,6 @@ public class EstadisticasController {
         return service.obtenerCumplimientoPorEntidad(fechaInicio, fechaFin);
     }
 
-    /**
-     * Cumplimiento por responsable
-     */
     @GetMapping("/cumplimiento-por-responsable")
     public Map<String, Object> cumplimientoPorResponsable(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
@@ -59,9 +50,6 @@ public class EstadisticasController {
         return service.obtenerCumplimientoPorResponsable(fechaInicio, fechaFin);
     }
 
-    /**
-     * Tendencia histórica mensual
-     */
     @GetMapping("/tendencia-historica")
     public Map<String, Object> tendenciaHistorica(
             @RequestParam(defaultValue = "6") int meses) {
@@ -69,17 +57,11 @@ public class EstadisticasController {
         return service.obtenerTendenciaHistorica(meses);
     }
 
-    /**
-     * Distribución de estados
-     */
     @GetMapping("/distribucion-estados")
     public Map<String, Long> distribucionEstados() {
         return service.obtenerDistribucionEstados();
     }
 
-    /**
-     * Reportes próximos a vencer
-     */
     @GetMapping("/proximos-vencer")
     public Map<String, Object> proximosAVencer(
             @RequestParam(defaultValue = "7") int dias) {
@@ -87,17 +69,11 @@ public class EstadisticasController {
         return service.obtenerProximosAVencer(dias);
     }
 
-    /**
-     * Reportes vencidos
-     */
     @GetMapping("/vencidos")
     public Map<String, Object> reportesVencidos() {
         return service.obtenerReportesVencidos();
     }
 
-    /**
-     * Top entidades con mayor incumplimiento
-     */
     @GetMapping("/top-incumplimiento-entidades")
     public Map<String, Object> topIncumplimientoEntidades(
             @RequestParam(defaultValue = "5") int top) {
@@ -105,9 +81,6 @@ public class EstadisticasController {
         return service.obtenerTopIncumplimientoEntidades(top);
     }
 
-    /**
-     * Top responsables con mayor incumplimiento
-     */
     @GetMapping("/top-incumplimiento-responsables")
     public Map<String, Object> topIncumplimientoResponsables(
             @RequestParam(defaultValue = "5") int top) {
@@ -115,9 +88,6 @@ public class EstadisticasController {
         return service.obtenerTopIncumplimientoResponsables(top);
     }
 
-    /**
-     * Resumen por período
-     */
     @GetMapping("/resumen-periodo")
     public Map<String, Object> resumenPorPeriodo(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,

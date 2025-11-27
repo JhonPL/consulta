@@ -19,17 +19,11 @@ public class CalendarioService {
 
     private final InstanciaReporteRepository instanciaRepo;
     private final UsuarioRepository usuarioRepo;
-    private final EntidadRepository entidadRepo;
-    private final EstadoCumplimientoRepository estadoRepo;
 
     public CalendarioService(InstanciaReporteRepository instanciaRepo,
-                            UsuarioRepository usuarioRepo,
-                            EntidadRepository entidadRepo,
-                            EstadoCumplimientoRepository estadoRepo) {
+                            UsuarioRepository usuarioRepo) {
         this.instanciaRepo = instanciaRepo;
         this.usuarioRepo = usuarioRepo;
-        this.entidadRepo = entidadRepo;
-        this.estadoRepo = estadoRepo;
     }
 
     public List<EventoCalendarioDTO> obtenerEventosCalendario(
@@ -39,11 +33,7 @@ public class CalendarioService {
         LocalDate inicio = mes.atDay(1);
         LocalDate fin = mes.atEndOfMonth();
 
-        List<InstanciaReporte> instancias = instanciaRepo.findAll().stream()
-                .filter(i -> i.getFechaVencimientoCalculada() != null)
-                .filter(i -> !i.getFechaVencimientoCalculada().isBefore(inicio) &&
-                           !i.getFechaVencimientoCalculada().isAfter(fin))
-                .collect(Collectors.toList());
+        List<InstanciaReporte> instancias = instanciaRepo.findByFechaVencimientoCalculadaBetween(inicio, fin);
 
         // Aplicar filtros
         if (entidadId != null) {
@@ -79,29 +69,18 @@ public class CalendarioService {
 
         String rol = usuario.getRol().getNombre().toUpperCase();
 
-        List<InstanciaReporte> instancias;
+        List<InstanciaReporte> instancias = instanciaRepo.findByFechaVencimientoCalculadaBetween(inicio, fin);
 
         if (rol.contains("ADMIN")) {
             // Admin ve todo
-            instancias = instanciaRepo.findAll().stream()
-                    .filter(i -> i.getFechaVencimientoCalculada() != null)
-                    .filter(i -> !i.getFechaVencimientoCalculada().isBefore(inicio) &&
-                               !i.getFechaVencimientoCalculada().isAfter(fin))
-                    .collect(Collectors.toList());
         } else if (rol.contains("SUPERVISOR")) {
             // Supervisor ve los que supervisa
-            instancias = instanciaRepo.findAll().stream()
-                    .filter(i -> i.getFechaVencimientoCalculada() != null)
-                    .filter(i -> !i.getFechaVencimientoCalculada().isBefore(inicio) &&
-                               !i.getFechaVencimientoCalculada().isAfter(fin))
+            instancias = instancias.stream()
                     .filter(i -> i.getReporte().getResponsableSupervision().getId().equals(usuario.getId()))
                     .collect(Collectors.toList());
         } else {
             // Elaborador solo ve los suyos
-            instancias = instanciaRepo.findAll().stream()
-                    .filter(i -> i.getFechaVencimientoCalculada() != null)
-                    .filter(i -> !i.getFechaVencimientoCalculada().isBefore(inicio) &&
-                               !i.getFechaVencimientoCalculada().isAfter(fin))
+            instancias = instancias.stream()
                     .filter(i -> i.getReporte().getResponsableElaboracion().getId().equals(usuario.getId()))
                     .collect(Collectors.toList());
         }
@@ -131,7 +110,6 @@ public class CalendarioService {
 
         List<InstanciaReporte> instancias = instanciaRepo.findAll();
 
-        // Aplicar filtros secuencialmente
         if (entidadId != null) {
             instancias = instancias.stream()
                     .filter(i -> i.getReporte().getEntidad().getId().equals(entidadId))
@@ -205,6 +183,10 @@ public class CalendarioService {
         evento.setResponsable(instancia.getReporte().getResponsableElaboracion().getNombreCompleto());
         evento.setFrecuencia(instancia.getReporte().getFrecuencia().getNombre());
         evento.setPeriodoReportado(instancia.getPeriodoReportado());
+        evento.setReporteId(instancia.getReporte().getId());
+        evento.setEntidadId(instancia.getReporte().getEntidad().getId());
+        evento.setResponsableElaboracionId(instancia.getReporte().getResponsableElaboracion().getId());
+        evento.setResponsableSupervisionId(instancia.getReporte().getResponsableSupervision().getId());
 
         // Calcular días hasta vencimiento
         long diasHasta = ChronoUnit.DAYS.between(LocalDate.now(), instancia.getFechaVencimientoCalculada());
@@ -231,7 +213,7 @@ public class CalendarioService {
             evento.setTextColor("#FFFFFF");
             evento.setPrioridad("ALTA");
         } else if (diasHasta <= 7) {
-            evento.setColor("#F59E0B"); // Amarillo/Ámbar
+            evento.setColor("#F59E0B"); // Amarillo
             evento.setBackgroundColor("#F59E0B");
             evento.setBorderColor("#D97706");
             evento.setTextColor("#FFFFFF");

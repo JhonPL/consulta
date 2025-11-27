@@ -21,7 +21,7 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("API Seguimiento de Reportes - Llanogas")
                         .version("1.0.0")
-                        .description("Sistema de seguimiento y gestión de reportes regulatorios")
+                        .description("Sistema de seguimiento y gestión de reportes regulatorios para entidades de control")
                         .contact(new Contact()
                                 .name("Equipo de Desarrollo")
                                 .email("desarrollo@llanogas.com"))

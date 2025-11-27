@@ -2,10 +2,17 @@ package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "instancias_reporte")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class InstanciaReporte {
 
     @Id
@@ -13,7 +20,7 @@ public class InstanciaReporte {
     @Column(name = "id_instancia")
     private Integer id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "reporte_id", nullable = false)
     private Reporte reporte;
 
@@ -21,12 +28,12 @@ public class InstanciaReporte {
     private String periodoReportado;
 
     @Column(name = "fecha_vencimiento_calculada")
-    private java.time.LocalDate fechaVencimientoCalculada;
+    private LocalDate fechaVencimientoCalculada;
 
     @Column(name = "fecha_envio_real")
-    private java.time.LocalDateTime fechaEnvioReal;
+    private LocalDateTime fechaEnvioReal;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "estado_id", nullable = false)
     private EstadoCumplimiento estado;
 
@@ -39,12 +46,23 @@ public class InstanciaReporte {
     @Column(name = "link_evidencia_envio", length = 255)
     private String linkEvidenciaEnvio;
 
-    @Column(columnDefinition = "text")
+    @Column(columnDefinition = "TEXT")
     private String observaciones;
 
     @Column(name = "fecha_creacion")
-    private java.time.LocalDateTime fechaCreacion;
+    private LocalDateTime fechaCreacion;
 
     @Column(name = "fecha_actualizacion")
-    private java.time.LocalDateTime fechaActualizacion;
+    private LocalDateTime fechaActualizacion;
+
+    @PrePersist
+    protected void onCreate() {
+        fechaCreacion = LocalDateTime.now();
+        fechaActualizacion = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        fechaActualizacion = LocalDateTime.now();
+    }
 }
