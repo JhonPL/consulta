@@ -2,10 +2,16 @@ package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "usuarios")
 @Data
+@EntityListeners(AuditingEntityListener.class)
 public class Usuario {
 
     @Id
@@ -40,9 +46,11 @@ public class Usuario {
 
     private boolean activo = true;
 
-    @Column(name = "fecha_creacion")
-    private java.time.LocalDateTime fechaCreacion;
+    @CreatedDate
+    @Column(name = "fecha_creacion", updatable = false)
+    private LocalDateTime fechaCreacion;
 
+    @LastModifiedDate
     @Column(name = "fecha_actualizacion")
-    private java.time.LocalDateTime fechaActualizacion;
+    private LocalDateTime fechaActualizacion;
 }

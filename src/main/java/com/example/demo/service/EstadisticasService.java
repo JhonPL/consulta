@@ -1,0 +1,346 @@
+package com.example.demo.service;
+
+import com.example.demo.dto.EstadisticasDTO;
+import com.example.demo.entity.InstanciaReporte;
+import com.example.demo.repository.AlertaRepository;
+import com.example.demo.repository.InstanciaReporteRepository;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+public class EstadisticasService {
+
+    private final InstanciaReporteRepository instanciaRepo;
+    private final AlertaRepository alertaRepo;
+
+    public EstadisticasService(InstanciaReporteRepository instanciaRepo,
+                              AlertaRepository alertaRepo) {
+        this.instanciaRepo = instanciaRepo;
+        this.alertaRepo = alertaRepo;
+    }
+
+    public EstadisticasDTO obtenerEstadisticas(LocalDate fechaInicio, LocalDate fechaFin) {
+        List<InstanciaReporte> instancias = instanciaRepo.findAll().stream()
+                .filter(i -> i.getFechaVencimientoCalculada() != null)
+                .filter(i -> !i.getFechaVencimientoCalculada().isBefore(fechaInicio) &&
+                           !i.getFechaVencimientoCalculada().isAfter(fechaFin))
+                .toList();
+
+        EstadisticasDTO stats = new EstadisticasDTO();
+        
+        stats.setTotalObligaciones((long) instancias.size());
+        
+        // Contar por estado
+        long enviadosATiempo = instancias.stream()
+                .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() <= 0)
+                .filter(i -> i.getEstado().getNombre().equalsIgnoreCase("Enviado") ||
+                           i.getEstado().getNombre().equalsIgnoreCase("Aprobado"))
+                .count();
+        
+        long enviadosTarde = instancias.stream()
+                .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0)
+                .filter(i -> i.getEstado().getNombre().equalsIgnoreCase("Enviado") ||
+                           i.getEstado().getNombre().equalsIgnoreCase("Aprobado"))
+                .count();
+        
+        long vencidos = instancias.stream()
+                .filter(i -> LocalDate.now().isAfter(i.getFechaVencimientoCalculada()))
+                .filter(i -> !i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
+                           !i.getEstado().getNombre().equalsIgnoreCase("Aprobado"))
+                .count();
+        
+        long pendientes = instancias.stream()
+                .filter(i -> i.getEstado().getNombre().equalsIgnoreCase("Pendiente") ||
+                           i.getEstado().getNombre().equalsIgnoreCase("En Proceso"))
+                .count();
+        
+        stats.setTotalEnviadosATiempo(enviadosATiempo);
+        stats.setTotalEnviadosTarde(enviadosTarde);
+        stats.setTotalVencidos(vencidos);
+        stats.setTotalPendientes(pendientes);
+        
+        // Calcular porcentaje de cumplimiento
+        long totalEnviados = enviadosATiempo + enviadosTarde;
+        if (stats.getTotalObligaciones() > 0) {
+            stats.setPorcentajeCumplimientoATiempo(
+                (enviadosATiempo * 100.0) / stats.getTotalObligaciones()
+            );
+        } else {
+            stats.setPorcentajeCumplimientoATiempo(0.0);
+        }
+        
+        // Calcular días de retraso promedio
+        double promedioRetraso = instancias.stream()
+                .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0)
+                .mapToInt(InstanciaReporte::getDiasDesviacion)
+                .average()
+                .orElse(0.0);
+        stats.setDiasRetrasoPromedio(promedioRetraso);
+        
+        // Entidad con mayor incumplimiento
+        Map<String, Long> incumplimientosPorEntidad = instancias.stream()
+                .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0)
+                .collect(Collectors.groupingBy(
+                    i -> i.getReporte().getEntidad().getRazonSocial(),
+                    Collectors.counting()
+                ));
+        
+        if (!incumplimientosPorEntidad.isEmpty()) {
+            Map.Entry<String, Long> maxEntidad = incumplimientosPorEntidad.entrySet().stream()
+                    .max(Map.Entry.comparingByValue())
+                    .orElse(null);
+            if (maxEntidad != null) {
+                stats.setEntidadMayorIncumplimiento(maxEntidad.getKey());
+                stats.setIncumplimientosEntidadProblema(maxEntidad.getValue());
+            }
+        }
+        
+        // Responsable con mayor incumplimiento
+        Map<String, Long> incumplimientosPorResponsable = instancias.stream()
+                .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0)
+                .collect(Collectors.groupingBy(
+                    i -> i.getReporte().getResponsableElaboracion().getNombreCompleto(),
+                    Collectors.counting()
+                ));
+        
+        if (!incumplimientosPorResponsable.isEmpty()) {
+            Map.Entry<String, Long> maxResponsable = incumplimientosPorResponsable.entrySet().stream()
+                    .max(Map.Entry.comparingByValue())
+                    .orElse(null);
+            if (maxResponsable != null) {
+                stats.setResponsableMayorIncumplimiento(maxResponsable.getKey());
+                stats.setIncumplimientosResponsableProblema(maxResponsable.getValue());
+            }
+        }
+        
+        // Distribución por estado
+        Map<String, Long> distribucion = instancias.stream()
+                .collect(Collectors.groupingBy(
+                    i -> i.getEstado().getNombre(),
+                    Collectors.counting()
+                ));
+        stats.setDistribucionEstados(distribucion);
+        
+        // Alertas críticas
+        long alertasCriticas = alertaRepo.findAll().stream()
+                .filter(a -> !a.isLeida())
+                .filter(a -> a.getTipo().isEsPostVencimiento())
+                .count();
+        stats.setAlertasCriticasActivas(alertasCriticas);
+        
+        // Próximos a vencer
+        LocalDate hoy = LocalDate.now();
+        long proximos7Dias = instancias.stream()
+                .filter(i -> i.getFechaVencimientoCalculada().isAfter(hoy) &&
+                           i.getFechaVencimientoCalculada().isBefore(hoy.plusDays(8)))
+                .filter(i -> !i.getEstado().getNombre().equalsIgnoreCase("Enviado"))
+                .count();
+        stats.setReportesProximosVencer7Dias(proximos7Dias);
+        
+        long proximos3Dias = instancias.stream()
+                .filter(i -> i.getFechaVencimientoCalculada().isAfter(hoy) &&
+                           i.getFechaVencimientoCalculada().isBefore(hoy.plusDays(4)))
+                .filter(i -> !i.getEstado().getNombre().equalsIgnoreCase("Enviado"))
+                .count();
+        stats.setReportesProximosVencer3Dias(proximos3Dias);
+        
+        return stats;
+    }
+
+    public Map<String, Object> obtenerCumplimientoPorEntidad(LocalDate fechaInicio, LocalDate fechaFin) {
+        List<InstanciaReporte> instancias = filtrarPorFechas(fechaInicio, fechaFin);
+        
+        Map<String, Map<String, Long>> cumplimientoPorEntidad = instancias.stream()
+                .collect(Collectors.groupingBy(
+                    i -> i.getReporte().getEntidad().getRazonSocial(),
+                    Collectors.groupingBy(
+                        i -> {
+                            if (i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
+                                i.getDiasDesviacion() != null && i.getDiasDesviacion() <= 0) {
+                                return "A Tiempo";
+                            } else if (i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
+                                      i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0) {
+                                return "Tarde";
+                            } else if (LocalDate.now().isAfter(i.getFechaVencimientoCalculada())) {
+                                return "Vencido";
+                            } else {
+                                return "Pendiente";
+                            }
+                        },
+                        Collectors.counting()
+                    )
+                ));
+        
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("cumplimientoPorEntidad", cumplimientoPorEntidad);
+        return resultado;
+    }
+
+    public Map<String, Object> obtenerCumplimientoPorResponsable(LocalDate fechaInicio, LocalDate fechaFin) {
+        List<InstanciaReporte> instancias = filtrarPorFechas(fechaInicio, fechaFin);
+        
+        Map<String, Map<String, Long>> cumplimientoPorResponsable = instancias.stream()
+                .collect(Collectors.groupingBy(
+                    i -> i.getReporte().getResponsableElaboracion().getNombreCompleto(),
+                    Collectors.groupingBy(
+                        i -> {
+                            if (i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
+                                i.getDiasDesviacion() != null && i.getDiasDesviacion() <= 0) {
+                                return "A Tiempo";
+                            } else if (i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
+                                      i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0) {
+                                return "Tarde";
+                            } else if (LocalDate.now().isAfter(i.getFechaVencimientoCalculada())) {
+                                return "Vencido";
+                            } else {
+                                return "Pendiente";
+                            }
+                        },
+                        Collectors.counting()
+                    )
+                ));
+        
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("cumplimientoPorResponsable", cumplimientoPorResponsable);
+        return resultado;
+    }
+
+    public Map<String, Object> obtenerTendenciaHistorica(int meses) {
+        Map<String, Double> tendencia = new LinkedHashMap<>();
+        LocalDate hoy = LocalDate.now();
+        
+        for (int i = meses - 1; i >= 0; i--) {
+            YearMonth mes = YearMonth.from(hoy.minusMonths(i));
+            LocalDate inicioMes = mes.atDay(1);
+            LocalDate finMes = mes.atEndOfMonth();
+            
+            List<InstanciaReporte> instanciasMes = instanciaRepo.findAll().stream()
+                    .filter(inst -> inst.getFechaVencimientoCalculada() != null)
+                    .filter(inst -> !inst.getFechaVencimientoCalculada().isBefore(inicioMes) &&
+                                  !inst.getFechaVencimientoCalculada().isAfter(finMes))
+                    .toList();
+            
+            long total = instanciasMes.size();
+            long aTiempo = instanciasMes.stream()
+                    .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() <= 0)
+                    .filter(i -> i.getEstado().getNombre().equalsIgnoreCase("Enviado"))
+                    .count();
+            
+            double porcentaje = total > 0 ? (aTiempo * 100.0) / total : 0.0;
+            tendencia.put(mes.format(DateTimeFormatter.ofPattern("yyyy-MM")), porcentaje);
+        }
+        
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("tendencia", tendencia);
+        return resultado;
+    }
+
+    public Map<String, Long> obtenerDistribucionEstados() {
+        return instanciaRepo.findAll().stream()
+                .collect(Collectors.groupingBy(
+                    i -> i.getEstado().getNombre(),
+                    Collectors.counting()
+                ));
+    }
+
+    public Map<String, Object> obtenerProximosAVencer(int dias) {
+        LocalDate hoy = LocalDate.now();
+        LocalDate limite = hoy.plusDays(dias);
+        
+        List<InstanciaReporte> proximos = instanciaRepo.findAll().stream()
+                .filter(i -> i.getFechaVencimientoCalculada().isAfter(hoy) &&
+                           i.getFechaVencimientoCalculada().isBefore(limite.plusDays(1)))
+                .filter(i -> !i.getEstado().getNombre().equalsIgnoreCase("Enviado"))
+                .sorted(Comparator.comparing(InstanciaReporte::getFechaVencimientoCalculada))
+                .toList();
+        
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("cantidad", proximos.size());
+        resultado.put("reportes", proximos);
+        return resultado;
+    }
+
+    public Map<String, Object> obtenerReportesVencidos() {
+        LocalDate hoy = LocalDate.now();
+        
+        List<InstanciaReporte> vencidos = instanciaRepo.findAll().stream()
+                .filter(i -> i.getFechaVencimientoCalculada().isBefore(hoy))
+                .filter(i -> !i.getEstado().getNombre().equalsIgnoreCase("Enviado") &&
+                           !i.getEstado().getNombre().equalsIgnoreCase("Aprobado"))
+                .sorted(Comparator.comparing(InstanciaReporte::getFechaVencimientoCalculada))
+                .toList();
+        
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("cantidad", vencidos.size());
+        resultado.put("reportes", vencidos);
+        return resultado;
+    }
+
+    public Map<String, Object> obtenerTopIncumplimientoEntidades(int top) {
+        Map<String, Long> incumplimientos = instanciaRepo.findAll().stream()
+                .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0)
+                .collect(Collectors.groupingBy(
+                    i -> i.getReporte().getEntidad().getRazonSocial(),
+                    Collectors.counting()
+                ));
+        
+        List<Map.Entry<String, Long>> topList = incumplimientos.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .limit(top)
+                .toList();
+        
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("top", topList);
+        return resultado;
+    }
+
+    public Map<String, Object> obtenerTopIncumplimientoResponsables(int top) {
+        Map<String, Long> incumplimientos = instanciaRepo.findAll().stream()
+                .filter(i -> i.getDiasDesviacion() != null && i.getDiasDesviacion() > 0)
+                .collect(Collectors.groupingBy(
+                    i -> i.getReporte().getResponsableElaboracion().getNombreCompleto(),
+                    Collectors.counting()
+                ));
+        
+        List<Map.Entry<String, Long>> topList = incumplimientos.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .limit(top)
+                .toList();
+        
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("top", topList);
+        return resultado;
+    }
+
+    public Map<String, Object> obtenerResumenPorPeriodo(LocalDate fechaInicio, LocalDate fechaFin) {
+        EstadisticasDTO stats = obtenerEstadisticas(fechaInicio, fechaFin);
+        
+        Map<String, Object> resumen = new HashMap<>();
+        resumen.put("periodo", Map.of(
+            "inicio", fechaInicio,
+            "fin", fechaFin
+        ));
+        resumen.put("estadisticas", stats);
+        
+        return resumen;
+    }
+
+    private List<InstanciaReporte> filtrarPorFechas(LocalDate fechaInicio, LocalDate fechaFin) {
+        if (fechaInicio == null) fechaInicio = LocalDate.now().minusMonths(3);
+        if (fechaFin == null) fechaFin = LocalDate.now();
+        
+        final LocalDate inicio = fechaInicio;
+        final LocalDate fin = fechaFin;
+        
+        return instanciaRepo.findAll().stream()
+                .filter(i -> i.getFechaVencimientoCalculada() != null)
+                .filter(i -> !i.getFechaVencimientoCalculada().isBefore(inicio) &&
+                           !i.getFechaVencimientoCalculada().isAfter(fin))
+                .toList();
+    }
+}
