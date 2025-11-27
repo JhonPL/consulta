@@ -31,3 +31,15 @@ build/
 
 ### VS Code ###
 .vscode/
+
+cat >> .gitignore << 'EOF'
+
+# Base de datos
+backend/backups/
+*.backup
+*.dump
+
+# Volumes de Docker
+postgres_data/
+pgadmin_data/
+EOF
