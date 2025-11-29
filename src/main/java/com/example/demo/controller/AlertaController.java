@@ -1,10 +1,14 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.AlertaDTO;
 import com.example.demo.entity.Alerta;
 import com.example.demo.service.AlertaService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/alertas")
@@ -60,5 +64,73 @@ public class AlertaController {
     @PatchMapping("/{id}/leer")
     public Alerta marcarComoLeida(@PathVariable Integer id) {
         return service.marcarComoLeida(id);
+    }
+
+    // ==================== NUEVOS ENDPOINTS ====================
+
+    /**
+     * Obtener mis alertas (usuario autenticado)
+     */
+    @GetMapping("/mis-alertas")
+    public ResponseEntity<List<AlertaDTO>> misAlertas(Authentication authentication) {
+        List<AlertaDTO> alertas = service.listarAlertasUsuarioActual(authentication);
+        return ResponseEntity.ok(alertas);
+    }
+
+    /**
+     * Obtener mis alertas no leídas (usuario autenticado)
+     */
+    @GetMapping("/mis-alertas/no-leidas")
+    public ResponseEntity<List<AlertaDTO>> misAlertasNoLeidas(Authentication authentication) {
+        List<AlertaDTO> alertas = service.listarAlertasNoLeidasUsuarioActual(authentication);
+        return ResponseEntity.ok(alertas);
+    }
+
+    /**
+     * Contar mis alertas no leídas
+     */
+    @GetMapping("/mis-alertas/contador")
+    public ResponseEntity<Map<String, Object>> contadorMisAlertas(Authentication authentication) {
+        long count = service.contarAlertasNoLeidasUsuarioActual(authentication);
+        return ResponseEntity.ok(Map.of("noLeidas", count));
+    }
+
+    /**
+     * Marcar una alerta como leída
+     */
+    @PatchMapping("/{id}/marcar-leida")
+    public ResponseEntity<AlertaDTO> marcarLeida(@PathVariable Integer id, Authentication authentication) {
+        AlertaDTO alerta = service.marcarComoLeidaDTO(id, authentication);
+        return ResponseEntity.ok(alerta);
+    }
+
+    /**
+     * Marcar todas mis alertas como leídas
+     */
+    @PatchMapping("/mis-alertas/marcar-todas-leidas")
+    public ResponseEntity<Map<String, Object>> marcarTodasLeidas(Authentication authentication) {
+        int cantidad = service.marcarTodasComoLeidas(authentication);
+        return ResponseEntity.ok(Map.of(
+            "mensaje", "Alertas marcadas como leídas",
+            "cantidad", cantidad
+        ));
+    }
+
+    /**
+     * Obtener todas las alertas (solo admin)
+     */
+    @GetMapping("/todas")
+    public ResponseEntity<List<AlertaDTO>> todasLasAlertas(Authentication authentication) {
+        List<AlertaDTO> alertas = service.listarTodasDTO(authentication);
+        return ResponseEntity.ok(alertas);
+    }
+
+    /**
+     * Obtener todas las alertas no leídas (solo admin)
+     */
+    @GetMapping("/todas/no-leidas")
+    public ResponseEntity<List<AlertaDTO>> todasNoLeidas(Authentication authentication) {
+        List<AlertaDTO> alertas = service.listarTodasNoLeidasDTO(authentication);
+        return ResponseEntity.ok(alertas);
     }
 }

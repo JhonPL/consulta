@@ -1,5 +1,6 @@
 package com.example.demo.service.impl;
 
+import com.example.demo.dto.AlertaDTO;
 import com.example.demo.entity.Alerta;
 import com.example.demo.entity.InstanciaReporte;
 import com.example.demo.entity.Usuario;
@@ -7,9 +8,13 @@ import com.example.demo.repository.AlertaRepository;
 import com.example.demo.repository.InstanciaReporteRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.service.AlertaService;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class AlertaServiceImpl implements AlertaService {
@@ -92,5 +97,169 @@ public class AlertaServiceImpl implements AlertaService {
         Alerta alerta = obtenerPorId(id);
         alerta.setLeida(true);
         return repository.save(alerta);
+    }
+
+    // ==================== NUEVOS MÉTODOS ====================
+
+    @Override
+    public List<AlertaDTO> listarAlertasUsuarioActual(Authentication authentication) {
+        Usuario usuario = obtenerUsuarioAutenticado(authentication);
+        String rol = usuario.getRol() != null ? usuario.getRol().getNombre().toUpperCase() : "";
+        
+        List<Alerta> alertas;
+        if (rol.contains("ADMIN")) {
+            // Admin ve todas las alertas
+            alertas = repository.findAll();
+        } else {
+            // Usuarios normales solo ven sus alertas
+            alertas = repository.findByUsuarioDestino(usuario);
+        }
+        
+        return alertas.stream()
+                .map(this::convertirADTO)
+                .sorted(Comparator.comparing(AlertaDTO::getFechaProgramada).reversed())
+                .limit(50) // Máximo 50 alertas
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<AlertaDTO> listarAlertasNoLeidasUsuarioActual(Authentication authentication) {
+        Usuario usuario = obtenerUsuarioAutenticado(authentication);
+        String rol = usuario.getRol() != null ? usuario.getRol().getNombre().toUpperCase() : "";
+        
+        List<Alerta> alertas;
+        if (rol.contains("ADMIN")) {
+            // Admin ve todas las no leídas
+            alertas = repository.findAll().stream()
+                    .filter(a -> !a.isLeida())
+                    .collect(Collectors.toList());
+        } else {
+            alertas = repository.findByUsuarioDestinoAndLeidaFalse(usuario);
+        }
+        
+        return alertas.stream()
+                .map(this::convertirADTO)
+                .sorted(Comparator.comparing(AlertaDTO::getFechaProgramada).reversed())
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public long contarAlertasNoLeidasUsuarioActual(Authentication authentication) {
+        Usuario usuario = obtenerUsuarioAutenticado(authentication);
+        String rol = usuario.getRol() != null ? usuario.getRol().getNombre().toUpperCase() : "";
+        
+        if (rol.contains("ADMIN")) {
+            return repository.findAll().stream()
+                    .filter(a -> !a.isLeida())
+                    .count();
+        } else {
+            return repository.findByUsuarioDestinoAndLeidaFalse(usuario).size();
+        }
+    }
+
+    @Override
+    @Transactional
+    public AlertaDTO marcarComoLeidaDTO(Integer id, Authentication authentication) {
+        Alerta alerta = obtenerPorId(id);
+        alerta.setLeida(true);
+        Alerta guardada = repository.save(alerta);
+        return convertirADTO(guardada);
+    }
+
+    @Override
+    @Transactional
+    public int marcarTodasComoLeidas(Authentication authentication) {
+        Usuario usuario = obtenerUsuarioAutenticado(authentication);
+        String rol = usuario.getRol() != null ? usuario.getRol().getNombre().toUpperCase() : "";
+        
+        List<Alerta> alertasNoLeidas;
+        if (rol.contains("ADMIN")) {
+            alertasNoLeidas = repository.findAll().stream()
+                    .filter(a -> !a.isLeida())
+                    .collect(Collectors.toList());
+        } else {
+            alertasNoLeidas = repository.findByUsuarioDestinoAndLeidaFalse(usuario);
+        }
+        
+        for (Alerta alerta : alertasNoLeidas) {
+            alerta.setLeida(true);
+            repository.save(alerta);
+        }
+        
+        return alertasNoLeidas.size();
+    }
+
+    @Override
+    public List<AlertaDTO> listarTodasDTO(Authentication authentication) {
+        // Verificar que sea admin
+        Usuario usuario = obtenerUsuarioAutenticado(authentication);
+        String rol = usuario.getRol() != null ? usuario.getRol().getNombre().toUpperCase() : "";
+        
+        if (!rol.contains("ADMIN")) {
+            throw new RuntimeException("Acceso denegado: solo administradores");
+        }
+        
+        return repository.findAll().stream()
+                .map(this::convertirADTO)
+                .sorted(Comparator.comparing(AlertaDTO::getFechaProgramada).reversed())
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<AlertaDTO> listarTodasNoLeidasDTO(Authentication authentication) {
+        Usuario usuario = obtenerUsuarioAutenticado(authentication);
+        String rol = usuario.getRol() != null ? usuario.getRol().getNombre().toUpperCase() : "";
+        
+        if (!rol.contains("ADMIN")) {
+            throw new RuntimeException("Acceso denegado: solo administradores");
+        }
+        
+        return repository.findAll().stream()
+                .filter(a -> !a.isLeida())
+                .map(this::convertirADTO)
+                .sorted(Comparator.comparing(AlertaDTO::getFechaProgramada).reversed())
+                .collect(Collectors.toList());
+    }
+
+    // ==================== MÉTODOS AUXILIARES ====================
+
+    private Usuario obtenerUsuarioAutenticado(Authentication authentication) {
+        String correo = authentication.getName();
+        return usuarioRepo.findByCorreo(correo)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+    }
+
+    private AlertaDTO convertirADTO(Alerta alerta) {
+        AlertaDTO dto = new AlertaDTO();
+        
+        dto.setId(alerta.getId());
+        dto.setInstanciaId(alerta.getInstancia() != null ? alerta.getInstancia().getId() : null);
+        
+        // Datos del reporte
+        if (alerta.getInstancia() != null && alerta.getInstancia().getReporte() != null) {
+            dto.setReporteNombre(alerta.getInstancia().getReporte().getNombre());
+            dto.setPeriodoReportado(alerta.getInstancia().getPeriodoReportado());
+        }
+        
+        // Tipo de alerta
+        if (alerta.getTipo() != null) {
+            dto.setTipoAlertaId(alerta.getTipo().getId());
+            dto.setTipoAlertaNombre(alerta.getTipo().getNombre());
+            dto.setTipoAlertaColor(alerta.getTipo().getColor());
+        }
+        
+        // Usuario destino
+        if (alerta.getUsuarioDestino() != null) {
+            dto.setUsuarioDestinoId(alerta.getUsuarioDestino().getId());
+            dto.setUsuarioDestinoNombre(alerta.getUsuarioDestino().getNombreCompleto());
+        }
+        
+        dto.setFechaProgramada(alerta.getFechaProgramada());
+        dto.setFechaEnviada(alerta.getFechaEnviada());
+        dto.setEnviada(alerta.isEnviada());
+        dto.setMensaje(alerta.getMensaje());
+        dto.setLeida(alerta.isLeida());
+        
+        return dto;
     }
 }
