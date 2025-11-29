@@ -41,7 +41,7 @@ public class Usuario {
     @Column(nullable = false, length = 100)
     private String cargo;
 
-    @Column(length = 30)
+    @Column(nullable = false, length = 30)
     private String telefono;
 
     @ManyToOne(fetch = FetchType.EAGER)

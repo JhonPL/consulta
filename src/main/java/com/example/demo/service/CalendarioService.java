@@ -35,26 +35,33 @@ public class CalendarioService {
 
         List<InstanciaReporte> instancias = instanciaRepo.findByFechaVencimientoCalculadaBetween(inicio, fin);
 
-        // Aplicar filtros
+        // Aplicar filtros con validaciones null
         if (entidadId != null) {
             instancias = instancias.stream()
-                    .filter(i -> i.getReporte().getEntidad().getId().equals(entidadId))
+                    .filter(i -> i.getReporte() != null && 
+                               i.getReporte().getEntidad() != null &&
+                               i.getReporte().getEntidad().getId().equals(entidadId))
                     .collect(Collectors.toList());
         }
 
         if (responsableId != null) {
             instancias = instancias.stream()
-                    .filter(i -> i.getReporte().getResponsableElaboracion().getId().equals(responsableId))
+                    .filter(i -> i.getReporte() != null && 
+                               i.getReporte().getResponsableElaboracion() != null &&
+                               i.getReporte().getResponsableElaboracion().getId().equals(responsableId))
                     .collect(Collectors.toList());
         }
 
         if (frecuencia != null && !frecuencia.isEmpty()) {
             instancias = instancias.stream()
-                    .filter(i -> i.getReporte().getFrecuencia().getNombre().equalsIgnoreCase(frecuencia))
+                    .filter(i -> i.getReporte() != null && 
+                               i.getReporte().getFrecuencia() != null &&
+                               i.getReporte().getFrecuencia().getNombre().equalsIgnoreCase(frecuencia))
                     .collect(Collectors.toList());
         }
 
         return instancias.stream()
+                .filter(this::esInstanciaValida)
                 .map(this::convertirAEvento)
                 .collect(Collectors.toList());
     }
@@ -67,7 +74,7 @@ public class CalendarioService {
         LocalDate inicio = mes.atDay(1);
         LocalDate fin = mes.atEndOfMonth();
 
-        String rol = usuario.getRol().getNombre().toUpperCase();
+        String rol = usuario.getRol() != null ? usuario.getRol().getNombre().toUpperCase() : "";
 
         List<InstanciaReporte> instancias = instanciaRepo.findByFechaVencimientoCalculadaBetween(inicio, fin);
 
@@ -76,16 +83,21 @@ public class CalendarioService {
         } else if (rol.contains("SUPERVISOR")) {
             // Supervisor ve los que supervisa
             instancias = instancias.stream()
-                    .filter(i -> i.getReporte().getResponsableSupervision().getId().equals(usuario.getId()))
+                    .filter(i -> i.getReporte() != null && 
+                               i.getReporte().getResponsableSupervision() != null &&
+                               i.getReporte().getResponsableSupervision().getId().equals(usuario.getId()))
                     .collect(Collectors.toList());
         } else {
             // Elaborador solo ve los suyos
             instancias = instancias.stream()
-                    .filter(i -> i.getReporte().getResponsableElaboracion().getId().equals(usuario.getId()))
+                    .filter(i -> i.getReporte() != null && 
+                               i.getReporte().getResponsableElaboracion() != null &&
+                               i.getReporte().getResponsableElaboracion().getId().equals(usuario.getId()))
                     .collect(Collectors.toList());
         }
 
         return instancias.stream()
+                .filter(this::esInstanciaValida)
                 .map(this::convertirAEvento)
                 .collect(Collectors.toList());
     }
@@ -112,7 +124,9 @@ public class CalendarioService {
 
         if (entidadId != null) {
             instancias = instancias.stream()
-                    .filter(i -> i.getReporte().getEntidad().getId().equals(entidadId))
+                    .filter(i -> i.getReporte() != null && 
+                               i.getReporte().getEntidad() != null &&
+                               i.getReporte().getEntidad().getId().equals(entidadId))
                     .collect(Collectors.toList());
         }
 
@@ -126,48 +140,80 @@ public class CalendarioService {
 
         if (periodoReportado != null && !periodoReportado.isEmpty()) {
             instancias = instancias.stream()
-                    .filter(i -> i.getPeriodoReportado().contains(periodoReportado))
+                    .filter(i -> i.getPeriodoReportado() != null &&
+                               i.getPeriodoReportado().contains(periodoReportado))
                     .collect(Collectors.toList());
         }
 
         if (estadoId != null) {
             instancias = instancias.stream()
-                    .filter(i -> i.getEstado().getId().equals(estadoId))
+                    .filter(i -> i.getEstado() != null &&
+                               i.getEstado().getId().equals(estadoId))
                     .collect(Collectors.toList());
         }
 
         if (responsableElaboracionId != null) {
             instancias = instancias.stream()
-                    .filter(i -> i.getReporte().getResponsableElaboracion().getId().equals(responsableElaboracionId))
+                    .filter(i -> i.getReporte() != null && 
+                               i.getReporte().getResponsableElaboracion() != null &&
+                               i.getReporte().getResponsableElaboracion().getId().equals(responsableElaboracionId))
                     .collect(Collectors.toList());
         }
 
         if (responsableSupervisionId != null) {
             instancias = instancias.stream()
-                    .filter(i -> i.getReporte().getResponsableSupervision().getId().equals(responsableSupervisionId))
+                    .filter(i -> i.getReporte() != null && 
+                               i.getReporte().getResponsableSupervision() != null &&
+                               i.getReporte().getResponsableSupervision().getId().equals(responsableSupervisionId))
                     .collect(Collectors.toList());
         }
 
         if (proceso != null && !proceso.isEmpty()) {
             instancias = instancias.stream()
-                    .filter(i -> i.getReporte().getResponsableElaboracion().getProceso().toLowerCase()
-                            .contains(proceso.toLowerCase()))
+                    .filter(i -> i.getReporte() != null && 
+                               i.getReporte().getResponsableElaboracion() != null &&
+                               i.getReporte().getResponsableElaboracion().getProceso() != null &&
+                               i.getReporte().getResponsableElaboracion().getProceso().toLowerCase()
+                                    .contains(proceso.toLowerCase()))
                     .collect(Collectors.toList());
         }
 
         if (busquedaLibre != null && !busquedaLibre.isEmpty()) {
             String busqueda = busquedaLibre.toLowerCase();
             instancias = instancias.stream()
-                    .filter(i -> 
-                        i.getReporte().getNombre().toLowerCase().contains(busqueda) ||
-                        i.getReporte().getEntidad().getRazonSocial().toLowerCase().contains(busqueda) ||
-                        i.getPeriodoReportado().toLowerCase().contains(busqueda) ||
-                        (i.getObservaciones() != null && i.getObservaciones().toLowerCase().contains(busqueda))
-                    )
+                    .filter(i -> {
+                        boolean coincide = false;
+                        if (i.getReporte() != null && i.getReporte().getNombre() != null) {
+                            coincide = coincide || i.getReporte().getNombre().toLowerCase().contains(busqueda);
+                        }
+                        if (i.getReporte() != null && i.getReporte().getEntidad() != null &&
+                            i.getReporte().getEntidad().getRazonSocial() != null) {
+                            coincide = coincide || i.getReporte().getEntidad().getRazonSocial().toLowerCase().contains(busqueda);
+                        }
+                        if (i.getPeriodoReportado() != null) {
+                            coincide = coincide || i.getPeriodoReportado().toLowerCase().contains(busqueda);
+                        }
+                        if (i.getObservaciones() != null) {
+                            coincide = coincide || i.getObservaciones().toLowerCase().contains(busqueda);
+                        }
+                        return coincide;
+                    })
                     .collect(Collectors.toList());
         }
 
         return instancias;
+    }
+
+    /**
+     * Valida que una instancia tenga los datos mínimos para convertirla a evento
+     */
+    private boolean esInstanciaValida(InstanciaReporte instancia) {
+        return instancia != null &&
+               instancia.getReporte() != null &&
+               instancia.getReporte().getEntidad() != null &&
+               instancia.getReporte().getFrecuencia() != null &&
+               instancia.getEstado() != null &&
+               instancia.getFechaVencimientoCalculada() != null;
     }
 
     private EventoCalendarioDTO convertirAEvento(InstanciaReporte instancia) {
@@ -180,13 +226,24 @@ public class CalendarioService {
         evento.setStart(instancia.getFechaVencimientoCalculada().toString());
         evento.setEstado(instancia.getEstado().getNombre());
         evento.setEntidad(instancia.getReporte().getEntidad().getRazonSocial());
-        evento.setResponsable(instancia.getReporte().getResponsableElaboracion().getNombreCompleto());
+        
+        // Responsable puede ser null
+        if (instancia.getReporte().getResponsableElaboracion() != null) {
+            evento.setResponsable(instancia.getReporte().getResponsableElaboracion().getNombreCompleto());
+            evento.setResponsableElaboracionId(instancia.getReporte().getResponsableElaboracion().getId());
+        } else {
+            evento.setResponsable("Sin asignar");
+        }
+        
         evento.setFrecuencia(instancia.getReporte().getFrecuencia().getNombre());
         evento.setPeriodoReportado(instancia.getPeriodoReportado());
         evento.setReporteId(instancia.getReporte().getId());
         evento.setEntidadId(instancia.getReporte().getEntidad().getId());
-        evento.setResponsableElaboracionId(instancia.getReporte().getResponsableElaboracion().getId());
-        evento.setResponsableSupervisionId(instancia.getReporte().getResponsableSupervision().getId());
+        
+        // Supervisor puede ser null
+        if (instancia.getReporte().getResponsableSupervision() != null) {
+            evento.setResponsableSupervisionId(instancia.getReporte().getResponsableSupervision().getId());
+        }
 
         // Calcular días hasta vencimiento
         long diasHasta = ChronoUnit.DAYS.between(LocalDate.now(), instancia.getFechaVencimientoCalculada());

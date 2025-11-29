@@ -40,14 +40,27 @@ public class InstanciaReporte {
     @Column(name = "dias_desviacion")
     private Integer diasDesviacion;
 
-    @Column(name = "link_reporte_final", length = 255)
+    @Column(name = "link_reporte_final", length = 500)
     private String linkReporteFinal;
 
-    @Column(name = "link_evidencia_envio", length = 255)
+    @Column(name = "link_evidencia_envio", length = 500)
     private String linkEvidenciaEnvio;
 
     @Column(columnDefinition = "TEXT")
     private String observaciones;
+
+    // Usuario que envió el reporte
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "enviado_por_id")
+    private Usuario enviadoPor;
+
+    // Nombre del archivo subido
+    @Column(name = "nombre_archivo", length = 255)
+    private String nombreArchivo;
+
+    // ID del archivo en Google Drive
+    @Column(name = "drive_file_id", length = 100)
+    private String driveFileId;
 
     @Column(name = "fecha_creacion")
     private LocalDateTime fechaCreacion;

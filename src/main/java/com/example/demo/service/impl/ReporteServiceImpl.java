@@ -2,8 +2,10 @@ package com.example.demo.service.impl;
 
 import com.example.demo.entity.*;
 import com.example.demo.repository.*;
+import com.example.demo.service.GeneradorInstanciasService;
 import com.example.demo.service.ReporteService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -13,13 +15,16 @@ public class ReporteServiceImpl implements ReporteService {
     private final ReporteRepository repository;
     private final EntidadRepository entidadRepo;
     private final FrecuenciaRepository frecuenciaRepo;
+    private final GeneradorInstanciasService generadorInstancias;
 
     public ReporteServiceImpl(ReporteRepository repository,
                               EntidadRepository entidadRepo,
-                              FrecuenciaRepository frecuenciaRepo) {
+                              FrecuenciaRepository frecuenciaRepo,
+                              GeneradorInstanciasService generadorInstancias) {
         this.repository = repository;
         this.entidadRepo = entidadRepo;
         this.frecuenciaRepo = frecuenciaRepo;
+        this.generadorInstancias = generadorInstancias;
     }
 
     @Override
@@ -34,13 +39,28 @@ public class ReporteServiceImpl implements ReporteService {
     }
 
     @Override
+    @Transactional
     public Reporte crear(Reporte reporte) {
-        return repository.save(reporte);
+        // Guardar el reporte
+        Reporte reporteGuardado = repository.save(reporte);
+        
+        // Generar instancias automáticamente para el año actual y siguiente
+        if (reporteGuardado.isActivo()) {
+            List<InstanciaReporte> instancias = generadorInstancias.generarInstanciasAnuales(reporteGuardado);
+            System.out.println("✓ Se generaron " + instancias.size() + " instancias para el reporte " + reporteGuardado.getId());
+        }
+        
+        return reporteGuardado;
     }
 
     @Override
+    @Transactional
     public Reporte actualizar(String id, Reporte reporte) {
         Reporte existente = obtenerPorId(id);
+        
+        boolean cambioFrecuencia = !existente.getFrecuencia().getId().equals(reporte.getFrecuencia().getId());
+        boolean cambioDia = !java.util.Objects.equals(existente.getDiaVencimiento(), reporte.getDiaVencimiento());
+        boolean cambioMes = !java.util.Objects.equals(existente.getMesVencimiento(), reporte.getMesVencimiento());
 
         existente.setNombre(reporte.getNombre());
         existente.setEntidad(reporte.getEntidad());
@@ -57,7 +77,14 @@ public class ReporteServiceImpl implements ReporteService {
         existente.setResponsableSupervision(reporte.getResponsableSupervision());
         existente.setActivo(reporte.isActivo());
 
-        return repository.save(existente);
+        Reporte reporteActualizado = repository.save(existente);
+        
+        // Si cambió la frecuencia o las fechas de vencimiento, regenerar instancias futuras
+        if (cambioFrecuencia || cambioDia || cambioMes) {
+            System.out.println("⚠ Cambios en frecuencia/vencimiento detectados. Considere regenerar instancias.");
+        }
+
+        return reporteActualizado;
     }
 
     @Override

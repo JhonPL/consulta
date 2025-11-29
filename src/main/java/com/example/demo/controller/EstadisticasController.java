@@ -28,7 +28,8 @@ public class EstadisticasController {
             fechaInicio = LocalDate.now().minusMonths(3);
         }
         if (fechaFin == null) {
-            fechaFin = LocalDate.now();
+            // Incluir hasta 3 meses en el futuro para ver reportes próximos
+            fechaFin = LocalDate.now().plusMonths(3);
         }
         
         return service.obtenerEstadisticas(fechaInicio, fechaFin);
